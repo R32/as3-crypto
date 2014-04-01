@@ -50,7 +50,7 @@ package ming{
 		}
 		// 预置一个 内嵌的 AES Key 值,每次更改 aes 模式时,需要重新设置;
 
-	};
+	
 
 	public static function md5(data:ByteArray):ByteArray {
 		return _lib.md5(data,data.length);
@@ -287,7 +287,7 @@ package ming{
 	 * @paramn
 	 * @return
 	 */
-	public function xor(bt:ByteArray,num:uint):Boolean {
+	public static function xor(bt:ByteArray,num:uint):Boolean {
 		var a:uint = 0,len:int = bt.length;
 
 		if ((num > 0xffffff)) {
