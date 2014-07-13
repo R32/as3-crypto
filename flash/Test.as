@@ -61,8 +61,7 @@
 				test_aes_cfb()	// done
 				test_aes_ofb()	// done
 				test_aes_ctr()	// done https://www.rfc-editor.org/rfc/rfc3686.txt
-			}
-			//return;
+			}//return;
 
 			//testMersenne()
 			loadTest('Test.as')
@@ -76,6 +75,14 @@
 			//trace(Crypt.base64('hello'));
 			//trace(Crypt.base64('aG90dXBAcXEuY29t',false))
 			
+			//
+			var xxa:ByteArray = new ByteArray();
+			xxa.writeMultiByte('我可以永远笑着扮演你的配角,在你的背后自已煎熬,如果你不想要,想退出要趁早','utf-8');
+			trace("--- as xor test --- ",xxa,xxa.length);
+			xxa = Crypt.xora(xxa);
+			trace(xxa," === ",xxa.length);
+			xxa = Crypt.xora(xxa);
+			trace(xxa," === ",xxa.length);
 		}
 		function onMemoryLeackTest(event:Event){
 			

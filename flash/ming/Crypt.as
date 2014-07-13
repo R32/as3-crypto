@@ -215,6 +215,16 @@ package ming{
 	}
 
 	/**
+	*	使用内嵌的 16字节/128位 Key 进行 xor 操作
+	* @data
+	* @return 
+	*/
+	public static function xora(data:ByteArray):ByteArray{
+		data.position = 0;
+		return _lib.xora(data,data.length);
+	}
+
+	/**
 	 * 现在 ECB,CBC 能自已处理,这个函数将被移除
 	 * @param bt
 	 * @deprecated
@@ -282,7 +292,7 @@ package ming{
 	}
 
 	/**
-	 * 对 bytearray xor 处理
+	 * 废弃
 	 * @paramdata
 	 * @paramn
 	 * @return

@@ -154,10 +154,11 @@ static unsigned char ctr_buf[AES_BLOCK_SIZE];	// for AES CTR RFC3638
 
 static tinymt32_t tinymt;	
 
-static unsigned char iv_static[16]; 	// 内部的一个 iv 变量.
-static unsigned char iv_tmp[16]; 		// 移出外部
+static unsigned char iv_aes[16];		// 新增. 考虑到 md5_static 的值因为调用md5而经常变动
+static unsigned char iv_random[16]; 	// 内部的随机 iv 变量.
+static unsigned char iv_outer[16]; 		// iv_outer 很可能是外部提供的一个 16 位 iv byteArray 值,如果外部没提供 则为 iv_random 的副本
 
-static unsigned char md5_static[16];	//
+static unsigned char md5_static[16];	// md5 计算结果
 
 static void pt(unsigned char *md,int size){
 	int i;
@@ -172,7 +173,7 @@ static void pt(unsigned char *md,int size){
 }
 
 /**
-*
+* 使用内嵌的 aes_key 值
 * @param which 值 应该要小于 AES_KEY_LIST_LENGTH
 */
 static AS3_Val thunk_aes_embed_key(void* self, AS3_Val args){
@@ -199,13 +200,13 @@ static AS3_Val thunk_aes_embed_key(void* self, AS3_Val args){
 	}
 	//md5 生成的值刚好是 16字,128位
 	
-	md5(ch	,	len	,	md5_static);
+	md5(ch	,	len	,	iv_aes);
 	
-	//pt(md5_static,16); // done
+	//pt(iv_aes,16); // done
 	
 	free(ch);
 	
-	if(aes_encrypt_key(md5_static, 16, e_ctx) == 0 && aes_decrypt_key(md5_static, 16, d_ctx) == 0){
+	if(aes_encrypt_key(iv_aes, 16, e_ctx) == 0 && aes_decrypt_key(iv_aes, 16, d_ctx) == 0){
 		ctx_ready = 1;
 	}else{
 		ctx_ready = 0;
@@ -228,9 +229,8 @@ static void tinymt32_list(float*list ,unsigned short len){
 }
 
 /**
-* 更新随机 iv 值
-* @param iv_static
-* @param len 128 192 256 ?? 算了,还是固定操作 iv_static 这个变量.
+* 更新随机 iv(iv_random[16])的值
+* 不推荐使用,建议使用由 AS3 生成的随机 iv 值传递到 iv_outer
 */
 static void random_iv(){
 	int j, i ,n;
@@ -242,17 +242,18 @@ static void random_iv(){
 		for(i = 0; i < 4 ; i+=1 , num >>=8){
 			n = (j << 2) + i;
 			//printf("  AND %3d-%2d",0xff & num,n);
-			//memset((void*)(iv_static + n) ,(char)(0xff & num),	1 );
-			iv_static[n] = (unsigned char)(0xff & num);
+			//memset((void*)(iv_random + n) ,(char)(0xff & num),	1 );
+			iv_random[n] = (unsigned char)(0xff & num);
 		}
 	}
-	//iv_static[16] = 0;
-	//printf("\n%16s",iv_static);
+	//iv_random[16] = 0;
+	//printf("\n%16s",iv_random);
 }
 
 /**
-*
-* @param [update=0]{int} 是否更新	
+* 返回当前 随机 iv(iv_random[16]) 的值
+* @param [update=0]{int} 是否更新
+* @return ByteArray	
 */
 static AS3_Val thunk_get_iv(void* self, AS3_Val args){
 	int update = 0;
@@ -260,23 +261,13 @@ static AS3_Val thunk_get_iv(void* self, AS3_Val args){
 	if(update){
 		random_iv();
 	}
-	return newByteArrayFromMalloc((void*)iv_static , 16);
+	return newByteArrayFromMalloc((void*)iv_random , 16);
 }
 
 
 /**
-*
-* 使用内嵌 Key ,
-*/
-// static AS3_Val thunk_aes_key_hide(void* self, AS3_Val args){
-	// int which = 0;	
-	// //AS3_ArrayValue(args, "IntType", &which);
-	// return AS3_Int(which);
-// }
-
-
-/**
-*	设置 aes_key
+*	AS端设置 aes_key
+* 仅用于测试, 由于AS端数据容易被识别,建议使用内嵌 iv_aes
 * @param byte_aes_key{ByteArray} AS3_Val
 */
 static AS3_Val thunk_aes_key_byte(void* self, AS3_Val args){
@@ -291,6 +282,8 @@ static AS3_Val thunk_aes_key_byte(void* self, AS3_Val args){
 	
 	key = (unsigned char*)mallocFromByteArray(data,key_len);
 
+	memcpy((void*)iv_aes,(void*)key, 16);	// **注意** :请使用 16/128bit 的密钥
+
 	if(aes_encrypt_key(key, key_len, e_ctx) == 0 && aes_decrypt_key(key, key_len, d_ctx) == 0){
 		err = 0;
 		ctx_ready = 1;
@@ -304,7 +297,8 @@ static AS3_Val thunk_aes_key_byte(void* self, AS3_Val args){
 }
 
 /**
-*	设置 aes_key 以 char * 的方式
+*	AS 端设置 aes_key 以 char * 的方式
+*	仅用于测试, 由于AS端数据容易被识别,建议使用内嵌 iv_aes
 * @param string_aes_key{String} // char *
 */
 static AS3_Val thunk_aes_key_str(void* self, AS3_Val args){
@@ -339,6 +333,8 @@ static AS3_Val thunk_aes_key_str(void* self, AS3_Val args){
 	}
 	
 	key_len = i / 2;
+
+	memcpy((void*)iv_aes,(void*)key, 16); // **注意** :请使用 16/128bit 的密钥
 	 
 	if(aes_encrypt_key((unsigned char*)key, key_len, e_ctx) == 0 && aes_decrypt_key((unsigned char*)key, key_len, d_ctx) == 0){
 		err = 0;
@@ -354,7 +350,7 @@ exit:
 
 
 /**
-*	重设
+*	aes_mode_reset 重设
 */
 static AS3_Val thunk_aes_mode_reset(void* self, AS3_Val args){
 	return AS3_Int(aes_mode_reset(e_ctx));
@@ -416,7 +412,8 @@ static AS3_Val thunk_aes_ecb(void* self, AS3_Val args){
 /**
 *
 * @param byte{ByteArray}
-* @param iv{ByteArray} 
+* @param [iv=null]{ByteArray}
+* @param len{int} byte.length 
 * @param [encode = false]{Boolean}
 */
 static AS3_Val thunk_aes_cbc(void* self, AS3_Val args){
@@ -433,9 +430,9 @@ static AS3_Val thunk_aes_cbc(void* self, AS3_Val args){
 		
 		if(fiv){
 			AS3_SetS(fiv, "position", zero_param);
-			AS3_ByteArray_readBytes(iv_tmp, fiv, 16);
+			AS3_ByteArray_readBytes(iv_outer, fiv, 16);
 		}else{
-			memcpy((void*)iv_tmp,(void*)iv_static , 16);
+			memcpy((void*)iv_outer,(void*)iv_random , 16);
 		}
 		
 		if(encode){
@@ -448,13 +445,13 @@ static AS3_Val thunk_aes_cbc(void* self, AS3_Val args){
 			
 			size += pad;
 			
-			err = aes_cbc_encrypt(ibuf, ibuf , size , iv_tmp , e_ctx);
+			err = aes_cbc_encrypt(ibuf, ibuf , size , iv_outer , e_ctx);
 			
 		}else{
 			
 			ibuf = (unsigned char*)mallocFromByteArray(data, size);
 			
-			err = aes_cbc_decrypt(ibuf, ibuf , size , iv_tmp , d_ctx);
+			err = aes_cbc_decrypt(ibuf, ibuf , size , iv_outer , d_ctx);
 			
 			pad = (char)*(ibuf + size -1);
 			
@@ -485,17 +482,17 @@ static AS3_Val thunk_aes_cfb(void* self, AS3_Val args){
 		
 		if(fiv){
 			AS3_SetS(fiv, "position", zero_param);
-			AS3_ByteArray_readBytes(iv_tmp, fiv, 16);
+			AS3_ByteArray_readBytes(iv_outer, fiv, 16);
 		}else{
-			memcpy((void*)iv_tmp,(void*)iv_static , 16);
+			memcpy((void*)iv_outer,(void*)iv_random , 16);
 		}
 		
 		aes_mode_reset(e_ctx);
 		
 		if(encode){
-			err = aes_cfb_encrypt(ibuf, ibuf , size , iv_tmp , e_ctx);
+			err = aes_cfb_encrypt(ibuf, ibuf , size , iv_outer , e_ctx);
 		}else{
-			err = aes_cfb_decrypt(ibuf, ibuf , size , iv_tmp , e_ctx);
+			err = aes_cfb_decrypt(ibuf, ibuf , size , iv_outer , e_ctx);
 		}
 		
 		if(err == 0){ //
@@ -524,14 +521,14 @@ static AS3_Val thunk_aes_ofb(void* self, AS3_Val args){
 
 		if(fiv){
 			AS3_SetS(fiv, "position", zero_param);
-			AS3_ByteArray_readBytes(iv_tmp, fiv, 16);
+			AS3_ByteArray_readBytes(iv_outer, fiv, 16);
 		}else{
-			memcpy((void*)iv_tmp,(void*)iv_static , 16);
+			memcpy((void*)iv_outer,(void*)iv_random , 16);
 		}
 		
 		aes_mode_reset(e_ctx);
 		
-		err = aes_ofb_crypt(ibuf, ibuf , size , iv_tmp , e_ctx);
+		err = aes_ofb_crypt(ibuf, ibuf , size , iv_outer , e_ctx);
 	
 		if(err == 0){
 			AS3_SetS(data, "position", zero_param);
@@ -557,14 +554,14 @@ static AS3_Val thunk_aes_ctr_3638(void* self, AS3_Val args){
 		ibuf = (unsigned char*)mallocFromByteArray(data,size);
 		if(fiv){
 			AS3_SetS(fiv, "position", zero_param);
-			AS3_ByteArray_readBytes(iv_tmp, fiv, 16);
+			AS3_ByteArray_readBytes(iv_outer, fiv, 16);
 		}else{
-			memcpy((void*)iv_tmp,(void*)iv_static , 16);
+			memcpy((void*)iv_outer,(void*)iv_random , 16);
 		}
 		
 		aes_mode_reset(e_ctx);
 		
-		ctr_init(iv_tmp,iv_tmp+4,ctr_buf);//we set iv as the nouce
+		ctr_init(iv_outer,iv_outer+4,ctr_buf);//we set iv as the nouce
 			
 		err = aes_ctr_crypt(ibuf, ibuf , size , ctr_buf, ctr_inc ,e_ctx);
 
@@ -757,6 +754,7 @@ static AS3_Val thunk_base64(void* self, AS3_Val args){
 
 /**
 *	这里可以自已设置一些 隐藏数字,外部用 xor 来解密
+*	由于 throw 可以抛出变量,这种形式并非安全,因此需要添加一个 xora 的方法
 */
 int IntList[8] = {1023,201,397,6771,8013,291,6187,1396}; // 随机乱数字
 AS3_Val thunk_getx(void *data, AS3_Val args){
@@ -766,6 +764,55 @@ AS3_Val thunk_getx(void *data, AS3_Val args){
 	);
 	return AS3_Int(IntList[who < 8 && who > -1 ? who : 0]);
 }
+
+/**
+*
+*@param byte{ByteArray}
+*@return ByteArray 返回新的
+**/
+static AS3_Val thunk_xora(void* self, AS3_Val args){
+	size_t size = 0;
+	size_t len = 0;
+
+	int pos = 0;
+	
+	AS3_Val data =NULL;
+	AS3_Val AS_Ret = NULL;
+	unsigned char* bytes = NULL;
+	unsigned int* bytes4 = NULL;
+	unsigned char* ret = NULL;
+	unsigned int* ret4 = NULL;
+	
+	AS3_ArrayValue(args, "AS3ValType,IntType", 	&data, &size);
+
+	len = size;
+
+	if(len > 0){
+		bytes = (unsigned char*)mallocFromByteArray(data, size );
+		bytes4 = (unsigned int*)bytes;
+		ret = (unsigned char*)malloc(size);
+		ret4 = (unsigned int*)ret;
+
+		while(len >=4){
+			*(ret4++) = *(bytes4++) ^ (iv_aes[pos % 16] | (iv_aes[pos+1 % 16] << 8) | (iv_aes[pos+2 % 16] << 16) | (iv_aes[pos+3 % 16] << 24));
+			pos += 4;
+			len -= 4;
+		}
+		while(len > 0){
+			*(ret + pos) = *(bytes + pos) ^ iv_aes[pos % 16];
+			pos += 1;
+			len -= 1;
+		}
+		AS_Ret = newByteArrayFromMalloc(ret,size);
+		free(ret);
+		free(bytes);
+		return AS_Ret;
+	}
+	return AS3_Null();
+}
+
+
+
 
 
 #ifdef LZMA
@@ -947,7 +994,9 @@ int main(int argc, char **argv) {
 	
 	gg_reg(gg_lib, "tinymt32", thunk_tinymt32);
 	
-	gg_reg(gg_lib, "tinymt32_byte", thunk_tinymt32_array);// 弃用...将 float数组 值转换成 byte 不正确
+	gg_reg(gg_lib, "tinymt32_byte", thunk_tinymt32_array);
+
+	gg_reg(gg_lib, "xora", thunk_xora);
 	
 #ifdef LZMA
 	gg_reg(gg_lib, "unlzma", thunk_unlzma);
@@ -957,5 +1006,5 @@ int main(int argc, char **argv) {
 	
 	aes_init() ; // init aes
 	
-	return 1;
+	return 0;
 }

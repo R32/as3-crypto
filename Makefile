@@ -15,6 +15,7 @@ BUILD_DIR	:= build
 CC	:=	gcc
 CCC	:=	g++ -fno-rtti
 
+# 将 所有 c 文件去除目录名,然后编译到同一目录下去会出现 **同名** 的问题
 $(BUILD_DIR)/%.o: %.c
 	@echo $(notdir $<)
 	$(CC) -c $(INCLUDES) $(OPTIMISE) $< -o $@
@@ -47,7 +48,7 @@ all: $(BUILD_DIR) $(NAME)
 $(NAME): $(OBJS)
 	$(CC) $(OBJS) -swc -o $(NAME).swc -O3 -Wl,--gc-sections
 	
-$(BUILD_DIR) :
+$(BUILD_DIR):
 	@mkdir -p $@
 	
 clean:
