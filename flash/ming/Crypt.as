@@ -217,11 +217,12 @@ package ming{
 	/**
 	*	使用内嵌的 16字节/128位 Key 进行 xor 操作
 	* @data
+	* @key 
 	* @return 
 	*/
-	public static function xora(data:ByteArray):ByteArray{
+	public static function xora(data:ByteArray,key:String = ''):ByteArray{
 		data.position = 0;
-		return _lib.xora(data,data.length);
+		return key ? _lib.xora(data,key) : _lib.xora(data);
 	}
 
 	/**

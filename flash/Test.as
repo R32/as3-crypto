@@ -77,12 +77,11 @@
 			
 			//
 			var xxa:ByteArray = new ByteArray();
-			xxa.writeMultiByte('我可以永远笑着扮演你的配角,在你的背后自已煎熬,如果你不想要,想退出要趁早','utf-8');
-			trace("--- as xor test --- ",xxa,xxa.length);
+			xxa.writeMultiByte('abcdefghijklmnopqrstuvwxyz','utf-8');
 			xxa = Crypt.xora(xxa);
-			trace(xxa," === ",xxa.length);
+			trace(Crypt.fromByte(xxa));
 			xxa = Crypt.xora(xxa);
-			trace(xxa," === ",xxa.length);
+			trace(xxa);
 		}
 		function onMemoryLeackTest(event:Event){
 			

@@ -782,33 +782,37 @@ static AS3_Val thunk_xora(void* self, AS3_Val args){
 	unsigned int* bytes4 = NULL;
 	unsigned char* ret = NULL;
 	unsigned int* ret4 = NULL;
+	unsigned char* val = NULL;	// 使用外部提供的 key.
 	
-	AS3_ArrayValue(args, "AS3ValType,IntType", 	&data, &size);
+	AS3_ArrayValue(args, "AS3ValType,StrType", 	&data, &val);
 
-	len = size;
 
-	if(len > 0){
-		bytes = (unsigned char*)mallocFromByteArray(data, size );
-		bytes4 = (unsigned int*)bytes;
-		ret = (unsigned char*)malloc(size);
-		ret4 = (unsigned int*)ret;
-
-		while(len >=4){
-			*(ret4++) = *(bytes4++) ^ (iv_aes[pos % 16] | (iv_aes[pos+1 % 16] << 8) | (iv_aes[pos+2 % 16] << 16) | (iv_aes[pos+3 % 16] << 24));
-			pos += 4;
-			len -= 4;
-		}
-		while(len > 0){
-			*(ret + pos) = *(bytes + pos) ^ iv_aes[pos % 16];
-			pos += 1;
-			len -= 1;
-		}
-		AS_Ret = newByteArrayFromMalloc(ret,size);
-		free(ret);
-		free(bytes);
-		return AS_Ret;
+	if(val == NULL){
+		memcpy((void*)iv_outer, (void*)iv_aes , 16);
+	}else{
+		md5(val, (size_t)strlen(val), iv_outer);
 	}
-	return AS3_Null();
+
+	bytes = (unsigned char*)newMallocFromByteArray(data, &size );
+	bytes4 = (unsigned int*)bytes;
+	
+	ret = (unsigned char*)malloc(size);
+	ret4 = (unsigned int*)ret;
+	len = size;
+	while(len >=4){
+		*(ret4++) = *(bytes4++) ^ (iv_outer[pos % 16] | (iv_outer[pos+1 % 16] << 8) | (iv_outer[pos+2 % 16] << 16) | (iv_outer[pos+3 % 16] << 24));
+		pos += 4;
+		len -= 4;
+	}
+	while(len > 0){
+		*(ret + pos) = *(bytes + pos) ^ iv_outer[pos % 16];
+		pos += 1;
+		len -= 1;
+	}
+	AS_Ret = newByteArrayFromMalloc(ret,size);
+	free(ret);
+	free(bytes);
+	return AS_Ret;
 }
 
 
